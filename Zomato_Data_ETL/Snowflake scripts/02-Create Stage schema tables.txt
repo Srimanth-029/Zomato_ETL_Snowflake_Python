@@ -1,0 +1,146 @@
+DESC TABLE STAGE.Restaurant_Events;
+
+CREATE TABLE IF NOT EXISTS STAGE.Restaurants(
+    -- Restaurant_Pk_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Restaurant_Id VARCHAR(50),
+    Restaurant_Name VARCHAR(255),
+    Restaurant_Booking_URL VARCHAR(500),
+    Restaurant_Menu_URL VARCHAR(500)
+)
+
+CREATE TABLE IF NOT EXISTS STAGE.User_Rating(
+    -- Rating_Id int NOT NULL PRIMARY KEY,
+    Restaurant_Id VARCHAR(50),
+    Aggregate_Rating VARCHAR(50),
+    Rating_Text VARCHAR(50),
+    Votes VARCHAR(50)
+)
+-- DROP TABLE STAGE.User_Rating
+
+CREATE TABLE IF NOT EXISTS STAGE.Country(
+    -- Country_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Country_Code VARCHAR(10),
+    Country VARCHAR(255)
+);
+
+CREATE TABLE IF NOT EXISTS STAGE.City(
+    -- City_Id INT IDENTITY(1,1) PRIMARY KEY,
+    City VARCHAR(255)
+);
+
+CREATE TABLE IF NOT EXISTS STAGE.Geographic_Dim(
+    -- Geo_Dim_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Lattitude VARCHAR(100),
+    Longitude VARCHAR(100)
+);
+
+CREATE TABLE IF NOT EXISTS STAGE.Restaurant_Location(
+    -- Restaurant_Location_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Res_Id Varchar(50),
+    Restaurant_Name VARCHAR(255),
+    City VARCHAR(100),
+    Country VARCHAR(100),
+    Address VARCHAR(500),
+    Locality VARCHAR(255),
+    Zipcode VARCHAR(100),
+    Lattitude VARCHAR(100),
+    Longitude VARCHAR(100)
+);
+
+-- DROP TABLE STAGE.Restaurant_Location;
+
+-- CREATE TABLE Date_Dim(
+--     -- Date_ID INT IDENTITY(1,1) PRIMARY KEY,
+--     DATE DATE,
+--     YEAR INT,
+--     Month_Number INT,
+--     Day_Number INT,
+--     Month VARCHAR(30),
+--     Day VARCHAR(30)
+-- )
+
+CREATE TABLE STAGE.Restaurant_Disclaimer(
+    -- Disclaimer_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Disclaimer VARCHAR(500)
+);
+
+-- DROP TABLE STAGE.Restaurant_Events
+
+CREATE TABLE STAGE.Restaurant_Events(
+    -- Restaurant_Event_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Res_Id VARCHAR(50),
+    Restaurant VARCHAR(255),
+    Event_Id VARCHAR(50) ,
+    Event_Title VARCHAR(500),
+    Event_Description VARCHAR(2000),
+    Event_Disclaimer VARCHAR(500),
+    Event_Start_Date VARCHAR(20),
+    Event_End_Date VARCHAR(20),
+    Event_Start_Time VARCHAR(20),
+    Event_End_Time VARCHAR(20),
+    Is_Acitve VARCHAR(1)
+);
+
+CREATE TABLE STAGE.Dim_Restaurant_Event_Photos
+(
+    -- Restaurant_Photo_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Event_Id VARCHAR(50) ,
+    Photo_Id VARCHAR(50),
+    Event_Photo_URL VARCHAR(1000)
+);
+
+CREATE TABLE STAGE.Restaurant_Cuisine(
+    -- Restaurant_Cuisine_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Cuisine VARCHAR(30)
+);
+
+CREATE TABLE STAGE.Dim_Currency(
+    -- Currency_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Currency VARCHAR(10)
+);
+
+
+CREATE OR REPLACE TABLE STAGE.Restaurant_Data_Mapping_Table_Extract(
+    Restaurant_Mapping_Extract_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Restaurant_Id VARCHAR(100),
+    Restaurant_Name VARCHAR(255),
+    Restaurant_Average_Cost_for_Two VARCHAR(50),
+    Restaurant_Cuisine  VARCHAR(30),
+    Restaurant_Currency VARCHAR(10),
+    City VARCHAR(100),
+    Country VARCHAR(100),
+    Address VARCHAR(500),
+    Locality VARCHAR(255),
+    Zipcode VARCHAR(100),
+    Lattitude VARCHAR(100),
+    Longitude VARCHAR(100),
+    Has_Online_Delivery VARCHAR(1),
+    Has_Table_Booking VARCHAR(1),
+    Restaurant_Event_Id VARCHAR(50),
+    Event_Name VARCHAR(500),
+    Event_Start_Date VARCHAR(20),
+    Event_End_Date VARCHAR(20),
+    Created_By VARCHAR(50) DEFAULT CURRENT_USER(),
+    Created_Date DATETIME DEFAULT current_timestamp()
+);
+
+-- ALTER TABLE STAGE.Restaurant_Data_Mapping_Table_Extract
+-- ADD Restaurant_Event_Id VARCHAR(50)
+
+CREATE OR REPLACE TABLE STAGE.Restaurant_Data_Mapping_Table_Transformed(
+    Restaurant_Mapping_Transformed_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Restaurant_Id INT NOT NULL,
+    Restaurant_Name VARCHAR(255),
+    Restaurant_Average_Cost_for_Two INT,
+    Restaurant_Cuisine_Id INT NOT NULL,
+    Restaurant_Currency_Id INT NOT NULL,
+    Restaurant_Location_Id INT NOT NULL,
+    Has_Online_Delivery BOOLEAN,
+    Has_Table_Booking BOOLEAN,
+    Restaurant_Rating_Id INT NOT NULL,
+    Restaurant_Event_Id VARCHAR(50),
+    Is_Active BOOLEAN DEFAULT TRUE NOT NULL,
+    Created_By VARCHAR(50) DEFAULT CURRENT_USER(),
+    Created_Date DATETIME DEFAULT current_timestamp()
+)
+

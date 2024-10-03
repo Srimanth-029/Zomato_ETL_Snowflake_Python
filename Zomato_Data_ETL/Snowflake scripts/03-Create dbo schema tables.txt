@@ -1,0 +1,133 @@
+DESC TABLE Restaurant_Events;
+
+CREATE OR REPLACE TABLE Restaurants(
+    Restaurant_Pk_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Restaurant_Id INT,
+    Restaurant_Name VARCHAR(100),
+    Restaurant_Booking_URL VARCHAR(500),
+    Restaurant_Menu_URL VARCHAR(500),
+    Is_Acitve BOOLEAN DEFAULT True NOT NULL,
+    Created_By VARCHAR(50) DEFAULT CURRENT_USER(),
+    Created_Date DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE TABLE User_Rating(
+    Rating_Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    Restaurant_Id int NOT NULL Foreign key references Restaurants(Restaurant_Pk_Id),
+    Aggregate_Rating FLOAT,
+    Rating_Text VARCHAR(50),
+    Votes INT,
+    Is_Active BOOLEAN DEFAULT TRUE NOT NULL,
+    Created_By VARCHAR(50) DEFAULT CURRENT_USER() NOT NULL,
+    Created_Date DATETIME DEFAULT CURRENT_TIMESTAMP() NOT NULL,
+    Modified_By VARCHAR(50),
+    Modified_Date DATETIME
+);
+
+CREATE OR REPLACE TABLE Country(
+    Country_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Country_Code INT,
+    Country VARCHAR(255)
+)
+
+CREATE TABLE IF NOT EXISTS City(
+    City_Id INT IDENTITY(1,1) PRIMARY KEY,
+    City VARCHAR(255)
+)
+
+CREATE OR REPLACE TABLE Geographic_Dim(
+    Geo_Dim_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Lattitude DECIMAL(28,10),
+    Longitude DECIMAL(28,10)
+)
+
+CREATE OR REPLACE TABLE Restaurant_Location(
+    Restaurant_Location_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Restaurant_Id INT NOT NULL FOREIGN KEY REFERENCES Restaurants(Restaurant_Pk_Id),
+    City_Id INT NOT NULL FOREIGN KEY REFERENCES City(City_Id),
+    Country_Id INT NOT NULL FOREIGN KEY REFERENCES Country(Country_Id),
+    Geo_Dim_Id INT NOT NULL FOREIGN KEY REFERENCES Geographic_Dim(Geo_Dim_Id),
+    Address VARCHAR(500),
+    Locality VARCHAR(255),
+    Zipcode VARCHAR(50)
+);
+
+CREATE TABLE Date_Dim(
+    Date_ID INT IDENTITY(1,1) PRIMARY KEY,
+    DATE DATE,
+    YEAR INT,
+    Month_Number INT,
+    Day_Number INT,
+    Month VARCHAR(30),
+    Day VARCHAR(30)
+)
+
+CREATE OR REPLACE TABLE Restaurant_Disclaimer(
+    Disclaimer_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Disclaimer VARCHAR(255)
+)
+
+
+CREATE OR REPLACE TABLE Restaurant_Events(
+    Restaurant_Event_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Restaurant_Id INT NOT NULL FOREIGN KEY REFERENCES Restaurants(Restaurant_pk_id),
+    Event_Id INT ,
+    Event_Title VARCHAR(1000),
+    Event_Description VARCHAR(2000),
+    Event_Disclaimer_Id INT FOREIGN KEY REFERENCES Restaurant_Disclaimer(Disclaimer_Id),
+    Event_Start_Date_Id INT FOREIGN KEY REFERENCES DATE_Dim(Date_Id),
+    Event_End_Date_Id INT FOREIGN KEY REFERENCES DATE_Dim(Date_Id),
+    Event_Start_Time TIME,
+    Event_End_Time TIME,
+    Created_By VARCHAR(50) DEFAULT CURRENT_USER() NOT NULL,
+    Created_Date DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    Modified_By VARCHAR(50),
+    Modified_Date DATETIME,
+    Is_Acitve BOOLEAN DEFAULT True NOT NULL
+);
+
+CREATE TABLE Dim_Restaurant_Event_Photos
+(
+    Restaurant_Photo_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Event_Id INT FOREIGN KEY REFERENCES Restaurant_Events(Restaurant_Event_Id),
+    Photo_Id INT,
+    Event_URL VARCHAR(1000)
+)
+
+CREATE TABLE Restaurant_Cuisine(
+    Restaurant_Cuisine_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Cuisine VARCHAR(30)
+)
+
+CREATE TABLE Dim_Currency(
+    Currency_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Currency VARCHAR(10)
+)
+
+
+CREATE OR REPLACE TABLE Restaurant_Data_Mapping_Table(
+    Restaurant_Mapping_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Restaurant_Id INT NOT NULL FOREIGN KEY REFERENCES Restaurants(Restaurant_Pk_Id),
+    Restaurant_Average_Cost_for_Two INT,
+    Restaurant_Cuisine_Id INT FOREIGN KEY REFERENCES Restaurant_Cuisine(Restaurant_Cuisine_Id), 
+    Restaurant_Currency_Id INT FOREIGN KEY REFERENCES Dim_Currency(Currency_Id), 
+    Restaurant_Location_Id INT FOREIGN KEY REFERENCES Restaurant_Location(Restaurant_Location_Id),
+    Has_Online_Delivery BOOLEAN,
+    Has_Table_Booking BOOLEAN,
+    Restaurant_Rating_Id INT FOREIGN KEY REFERENCES User_Rating(Rating_Id),
+    Restaurant_Event_Id INT NULL FOREIGN KEY REFERENCES Restaurant_Events(Restaurant_Event_Id),
+    Is_Active BOOLEAN DEFAULT TRUE NOT NULL,
+    Created_By VARCHAR(50) DEFAULT CURRENT_USER(),
+    Created_Date DATETIME DEFAULT current_timestamp(),
+    Modified_By VARCHAR(50),
+    Modified_Date DATETIME
+)
+
+CREATE OR REPLACE TABLE ERROR_LOG(
+    Error_Log_Id INT IDENTITY(1,1) PRIMARY KEY,
+    Error_Code VARCHAR(25),
+    Error_Message VARCHAR(2000),
+    Error_State VARCHAR(25),
+    Created_By VARCHAR(50) DEFAULT CURRENT_USER(),
+    Created_Date DATETIME DEFAULT CURRENT_TIMESTAMP()
+);

@@ -1,0 +1,168 @@
+CREATE OR REPLACE PROCEDURE sp_ins_stagetomain()
+RETURNS STRING NULL
+LANGUAGE SQL
+AS
+$$
+    DECLARE Result VARCHAR(50);
+BEGIN
+    INSERT INTO ZOMATO_ETL.DBO.Restaurants(RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_BOOKING_URL,RESTAURANT_MENU_URL,IS_ACITVE,CREATED_BY,CREATED_DATE)
+        SELECT SR.Restaurant_Id,SR.Restaurant_Name,SR.Restaurant_Booking_URL,SR.Restaurant_Menu_URL,TRUE,CURRENT_USER(),CURRENT_TIMESTAMP()
+        FROM STAGE.Restaurants SR
+        LEFT JOIN DBO.Restaurants DR
+        ON DR.RESTAURANT_ID = SR.RESTAURANT_ID
+        AND DR.RESTAURANT_NAME = SR.RESTAURANT_NAME
+        AND DR.Is_Acitve = TRUE
+        WHERE DR.RESTAURANT_ID IS NULL;
+
+    MERGE INTO ZOMATO_ETL.DBO.User_Rating DUR
+    USING ZOMATO_ETL.STAGE.User_Rating SUR
+    ON DUR.RESTAURANT_ID = SUR.RESTAURANT_ID
+    WHEN MATCHED AND ((DUR.AGGREGATE_RATING <> SUR.AGGREGATE_RATING OR DUR.RATING_TEXT <> SUR.RATING_TEXT OR DUR.VOTES <> SUR.VOTES) AND DUR.Is_Active = True) THEN 
+        UPDATE SET DUR.AGGREGATE_RATING = SUR.AGGREGATE_RATING,DUR.VOTES = SUR.VOTES,DUR.RATING_TEXT = SUR.RATING_TEXT,Modified_By = CURRENT_USER(),MODIFIED_DATE = CURRENT_TIMESTAMP();
+
+    INSERT INTO ZOMATO_ETL.DBO.User_Rating(RESTAURANT_ID,AGGREGATE_RATING,RATING_TEXT,VOTES,Created_By,Created_Date)
+    SELECT SUR.RESTAURANT_ID,SUR.AGGREGATE_RATING,SUR.RATING_TEXT,SUR.VOTES,CURRENT_USER(),SYSTIMESTAMP() FROM ZOMATO_ETL.STAGE.User_Rating SUR
+    LEFT JOIN ZOMATO_ETL.DBO.User_Rating DUR 
+    ON DUR.RESTAURANT_ID = SUR.RESTAURANT_ID
+    AND DUR.IS_ACTIVE = TRUE
+    WHERE DUR.Restaurant_Id IS NULL;
+
+    INSERT INTO ZOMATO_ETL.DBO.Country(Country_Code,Country)
+    SELECT SC.Country_Code,SC.Country FROM ZOMATO_ETL.STAGE.Country SC
+    LEFT JOIN ZOMATO_ETL.DBO.Country DC
+    ON SC.Country_Code = DC.Country_Code
+    AND SC.Country = DC.Country
+    WHERE DC.Country IS NULL;
+
+    INSERT INTO ZOMATO_ETL.DBO.City(City)
+    SELECT SC.City
+    FROM ZOMATO_ETL.STAGE.City SC
+    LEFT JOIN ZOMATO_ETL.DBO.City DC
+    ON DC.City = SC.City
+    where DC.City IS NULL;
+
+    INSERT INTO ZOMATO_ETL.DBO.Geographic_Dim(Lattitude,Longitude)
+    SELECT SGD.Lattitude,SGD.Longitude
+    FROM ZOMATO_ETL.STAGE.Geographic_Dim SGD
+    LEFT JOIN ZOMATO_ETL.DBO.Geographic_Dim ZDG
+    ON ZDG.Lattitude = CAST(SGD.Lattitude as DECIMAL(28,10))
+    AND ZDG.Longitude = CAST(SGD.Longitude as DECIMAL(28,10))
+    WHERE ZDG.Lattitude IS NULL;
+
+    INSERT INTO ZOMATO_ETL.DBO.Restaurant_Location(RESTAURANT_ID,CITY_ID,COUNTRY_ID,GEO_DIM_ID,ADDRESS,LOCALITY,ZIPCODE)
+    SELECT R.Restaurant_Pk_Id,C.CITY_ID,CO.COUNTRY_ID,ZDG.GEO_DIM_ID,ZSL.ADDRESS,ZSL.LOCALITY,ZSL.ZIPCODE
+    FROM ZOMATO_ETL.STAGE.Restaurant_Location ZSL
+    LEFT JOIN ZOMATO_ETL.DBO.Restaurants R
+    on R.Restaurant_Id = ZSL.Res_Id
+    AND R.Restaurant_Name = ZSL.Restaurant_Name
+    AND R.Is_Acitve = TRUE
+    LEFT JOIN ZOMATO_ETL.DBO.City C
+    ON C.City = ZSL.City
+    LEFT JOIN ZOMATO_ETL.DBO.Country CO
+    on CO.Country_Code = ZSL.Country
+    LEFT JOIN ZOMATO_ETL.DBO.Geographic_Dim ZDG
+    ON ZDG.Lattitude = CAST(ZSL.Lattitude as DECIMAL(28,10))
+    AND ZDG.Longitude = CAST(ZSL.Longitude as DECIMAL(28,10))
+    LEFT JOIN ZOMATO_ETL.DBO.Restaurant_Location ZDL
+    ON ZDL.Restaurant_Id = R.Restaurant_Pk_Id
+    AND ZDL.CITY_ID = C.CITY_ID
+    AND ZDL.COUNTRY_ID = CO.COUNTRY_ID
+    AND ZDL.GEO_DIM_ID = ZDG.Geo_Dim_Id
+    AND ZDL.ADDRESS = ZSL.ADDRESS
+    AND ZDL.LOCALITY = ZSL.LOCALITY
+    AND ZDL.ZIPCODE = ZSL.ZIPCODE
+    WHERE ZDL.RESTAURANT_ID IS NULL;
+
+    INSERT INTO ZOMATO_ETL.DBO.Restaurant_Disclaimer(Disclaimer)
+    SELECT ZSR.Disclaimer
+    FROM ZOMATO_ETL.STAGE.Restaurant_Disclaimer ZSR
+    LEFT JOIN ZOMATO_ETL.DBO.Restaurant_Disclaimer ZDR
+    ON ZDR.Disclaimer = ZSR.Disclaimer
+    WHERE ZDR.Disclaimer IS NULL;
+
+    MERGE INTO ZOMATO_ETL.DBO.Restaurant_Events ZDR
+    USING (SELECT R.Restaurant_Pk_Id,ZSL.EVENT_ID,ZSL.Is_Acitve,CURRENT_USER() Modified_By,CURRENT_TIMESTAMP() Modified_Date FROM ZOMATO_ETL.STAGE.Restaurant_Events ZSL
+        JOIN ZOMATO_ETL.DBO.Restaurants R
+        ON R.Restaurant_Id = ZSL.Res_Id
+        AND R.Restaurant_Name = ZSL.Restaurant
+        AND R.Is_Acitve = TRUE
+        JOIN ZOMATO_ETL.DBO.Restaurant_Events ZDR
+        ON ZDR.Restaurant_Id = R.Restaurant_Pk_Id
+        AND ZDR.Event_Id = ZSL.EVENT_ID
+        AND ZDR.Event_Title = ZSL.Event_Title
+        WHERE ZDR.Is_Acitve = 1 AND ZSL.Is_Acitve = 0
+        ) C
+    ON C.Restaurant_Pk_Id = ZDR.Restaurant_Id
+    AND C.EVENT_ID = ZDR.EVENT_ID
+    AND ZDR.Is_Acitve = TRUE
+    WHEN MATCHED THEN
+        UPDATE SET ZDR.Is_Acitve = C.Is_Acitve,ZDR.Modified_By = C.Modified_By,ZDR.Modified_Date = C.Modified_Date;
+
+    INSERT INTO ZOMATO_ETL.DBO.Restaurant_Events(RESTAURANT_ID,EVENT_ID,EVENT_TITLE,EVENT_DESCRIPTION,EVENT_DISCLAIMER_ID,EVENT_START_DATE_ID,EVENT_END_DATE_ID,EVENT_START_TIME,EVENT_END_TIME,IS_ACITVE,CREATED_BY,CREATED_DATE)
+    SELECT R.Restaurant_Pk_Id,ZSL.EVENT_ID,ZSL.EVENT_TITLE,ZSL.EVENT_DESCRIPTION,RD.Disclaimer_Id,DD.Date_Id Start_Date,DL.Date_Id End_Date,ZSL.EVENT_START_TIME,ZSL.EVENT_END_TIME,ZSL.Is_Acitve,CURRENT_USER(),CURRENT_TIMESTAMP()
+        FROM 
+        (SELECT * FROM ZOMATO_ETL.STAGE.Restaurant_Events WHERE IS_ACITVE = 1) ZSL
+        LEFT JOIN ZOMATO_ETL.DBO.Restaurants R
+        on R.Restaurant_Id = ZSL.Res_Id
+        AND R.Restaurant_Name = ZSL.Restaurant
+        AND R.Is_Acitve = TRUE
+        LEFT JOIN ZOMATO_ETL.DBO.Restaurant_Disclaimer RD
+        ON RD.Disclaimer = ZSL.EVENT_DISCLAIMER
+        LEFT JOIN ZOMATO_ETL.DBO.Date_Dim DD
+        ON DD.Date = DATE(ZSL.EVENT_START_DATE)
+        LEFT JOIN ZOMATO_ETL.DBO.Date_Dim DL
+        ON DL.Date = DATE(ZSL.EVENT_END_DATE) 
+        LEFT JOIN ZOMATO_ETL.DBO.Restaurant_Events ZDR
+        ON ZDR.Restaurant_Id = R.Restaurant_Pk_Id
+        AND ZDR.Event_Id = ZSL.Event_Id
+        AND ZDR.EVENT_TITLE = ZSL.EVENT_TITLE
+        AND ZDR.Event_Disclaimer_Id = RD.Disclaimer_Id
+        AND ZDR.EVENT_START_DATE_ID = DD.DATE_ID
+        AND ZDR.EVENT_END_DATE_ID = DL.DATE_ID
+        -- AND ZDR.Is_Acitve = 1
+        where ZDR.Is_Acitve = 1 AND ZDR.Restaurant_Id IS NULL;
+   
+    INSERT INTO ZOMATO_ETL.DBO.Dim_Restaurant_Event_Photos(Event_Id,Photo_Id,Event_URL)
+    SELECT RDE.Restaurant_Event_Id,REP.Photo_Id,REP.Event_Photo_URL
+    FROM ZOMATO_ETL.STAGE.Dim_Restaurant_Event_Photos REP
+    LEFT JOIN ZOMATO_ETL.DBO.Restaurant_Events RDE
+    ON RDE.Event_Id = REP.Event_Id
+    LEFT JOIN ZOMATO_ETL.DBO.Dim_Restaurant_Event_Photos RDP
+    ON RDP.Event_Id = RDE.Restaurant_Event_Id
+    AND RDP.Photo_Id = REP.Photo_Id
+    AND RDP.Event_URL = REP.Event_Photo_URL
+    WHERE RDP.Restaurant_Photo_Id IS NULL;
+
+    INSERT INTO ZOMATO_ETL.DBO.Restaurant_Cuisine(Cuisine)
+    select SR.CUISINE
+    from ZOMATO_ETL.STAGE.Restaurant_Cuisine sr
+    LEFT JOIN ZOMATO_ETL.DBO.Restaurant_Cuisine DR
+    ON SR.Cuisine = DR.CUISINE
+    WHERE DR.CUISINE IS NULL;
+
+    INSERT INTO ZOMATO_ETL.DBO.Dim_Currency(Currency)
+    SELECT DC.CURRENCY
+    FROM ZOMATO_ETL.STAGE.Dim_Currency DC
+    LEFT JOIN ZOMATO_ETL.DBO.Dim_Currency DDC
+    ON DC.CURRENCY = DDC.CURRENCY
+    WHERE DDC.CURRENCY IS NULL;
+    
+    RESULT := 'Successfully Inserted';
+    RETURN RESULT;
+    
+  EXCEPTION
+    WHEN OTHER THEN
+        LET sql_code := sqlcode;
+        LET sql_err := sqlerrm;
+        LET sql_state := sqlstate;
+        INSERT INTO ERROR_LOG(Error_Code,Error_Message,Error_State,Created_By,Created_Date)
+            VALUES(:sql_code,:sql_err,:sql_state,CURRENT_USER(),CURRENT_TIMESTAMP());
+    
+END;
+$$;
+
+-- CALL sp_ins_stagetomain();
+
+DESC TABLE ZOMATO_ETL.DBO.User_Rating;
+SELECT * FROM ZOMATO_ETL.STAGE.User_Rating
+WHERE RESTAURANT_ID IS NULL

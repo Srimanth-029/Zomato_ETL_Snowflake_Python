@@ -1,0 +1,97 @@
+CREATE OR REPLACE PROCEDURE divide_numbers(num1 NUMBER, num2 NUMBER)
+RETURNS NUMBER
+LANGUAGE SQL
+AS
+$$
+    DECLARE result_var NUMBER;
+    
+BEGIN
+    -- Check for division by zero
+    IF (num2 = 0) = TRUE THEN
+        RAISE ERROR 'Division by zero is not allowed';
+    END IF;
+
+    -- Perform the division
+    result_var := num1 / num2;
+
+    -- Return the result
+    RETURN result_var;
+
+EXCEPTION
+    -- Catch any exceptions that occur
+    WHEN OTHERS THEN
+        RAISE ERROR 'An unexpected error occurred: ' || CURRENT_EXCEPTION();
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE divide_numbers()
+returns string null
+language sql
+as
+$$
+BEGIN
+  SELECT * FROM non_existent_table;
+EXCEPTION
+  WHEN STATEMENT_ERROR THEN
+    LET LINE := SQLCODE || ': ' || SQLERRM;
+    INSERT INTO myexceptions(B) VALUES (:line);
+    RAISE; -- Raise the same exception that you are handling.
+END;
+$$;
+
+CREATE OR REPLACE TEMPORARY TABLE myexceptions(A VARCHAR(1000),B INT,C VARCHAR(1000));
+SELECT * FROM myexceptions;
+CALL divide_numbers();
+
+
+
+DECLARE
+  my_exception EXCEPTION (-20002, 'Raised MY_EXCEPTION.');
+  x INT;
+BEGIN
+  LET counter := 0;
+  LET should_raise_exception := true;
+  X := 'Srimanth';
+  insert into myexceptions(b)
+  values('xyzvbndhvseiefgligfilgal');
+  select * from non_existent_table;
+  
+  IF (should_raise_exception) THEN
+    RAISE my_exception;
+  END IF;
+  counter := counter + 1;
+  RETURN counter;
+EXCEPTION
+  WHEN statement_error THEN
+  LET err_code := sqlcode;
+  LET errm := sqlerrm; 
+  LET state_code := sqlstate;
+  -- INSERT INTO MYEXCEPTIONS(A,B,C) 
+  -- VALUES(:err_code,:errm,:state_code);
+    RETURN OBJECT_CONSTRUCT('Error type', 'STATEMENT_ERROR',
+                            'SQLCODE', sqlcode,
+                            'SQLERRM','se ' || sqlerrm,
+                            'SQLSTATE', sqlstate);
+  WHEN EXPRESSION_ERROR THEN
+  LET err_code := sqlcode;
+  LET errm := sqlerrm; 
+  LET state_code := sqlstate;
+  INSERT INTO MYEXCEPTIONS(A,C) 
+  VALUES(:err_code,:state_code);
+   RETURN OBJECT_CONSTRUCT('Error type', 'EXPRESSION_ERROR',
+                            'SQLCODE', sqlcode,
+                            'SQLERRM','x'  || sqlerrm,
+                            'SQLSTATE', sqlstate);
+  WHEN my_exception THEN
+    RETURN OBJECT_CONSTRUCT('Error type', 'MY_EXCEPTION',
+                            'SQLCODE', sqlcode,
+                            'SQLERRM', sqlerrm,
+                            'SQLSTATE', sqlstate);
+  WHEN OTHER THEN
+    RETURN OBJECT_CONSTRUCT('Error type', 'Other error',
+                            'SQLCODE', sqlcode,
+                            'SQLERRM', sqlerrm,
+                            'SQLSTATE', sqlstate);
+  END;
+
+  SELECT * FROM MYEXCEPTIONS;

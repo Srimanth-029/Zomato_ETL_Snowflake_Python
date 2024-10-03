@@ -1,0 +1,33 @@
+CREATE DATABASE IF NOT EXISTS Zomato_ETL
+
+CREATE SCHEMA IF NOT EXISTS STAGE
+
+CREATE TABLE IF NOT EXISTS STAGE.Raw_JSON_Data(DATA VARIANT)
+
+CREATE SCHEMA IF NOT EXISTS dbo
+
+CREATE STAGE IF NOT EXISTS Zomato_Data
+
+LIST @Zomato_Data;
+
+RM @Zomato_Data pattern='.*4\.json$'; --Remove File which contains xlsx
+
+-- PUT 'file://C:/Users/polam/Downloads/Zomato Restaurant Data/Country-Code.csv' @Zomato_Data;
+
+CREATE OR REPLACE FILE FORMAT Json_File_Data
+    TYPE = 'json'
+
+CREATE OR REPLACE FILE FORMAT Zomato_Country_Data
+    TYPE = 'CSV'
+    skip_header = 1
+    field_Delimiter = ','
+    field_optionally_enclosed_by = '"'
+
+CREATE OR REPLACE STREAM ZOMATO_ETL.DBO.Event_Inactive_Capture
+ON TABLE ZOMATO_ETL.DBO.Restaurant_Events
+APPEND_ONLY = FALSE;
+
+CREATE OR REPLACE STREAM ZOMATO_ETL.DBO.Rest_Ratings_Capture
+on table ZOMATO_ETL.DBO.User_Rating
+APPEND_ONLY = FALSE;
+

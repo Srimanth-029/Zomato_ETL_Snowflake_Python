@@ -1,0 +1,137 @@
+USE DATABASE ZOMATO_ETL;
+USE SCHEMA ZOMATO_ETL.DBO;
+
+CREATE OR REPLACE PROCEDURE sp_insstagetable()
+RETURNS STRING NULL
+LANGUAGE SQL
+AS
+$$
+    DECLARE Result VARCHAR(50);
+BEGIN
+
+    CALL sp_truncatestgtables();
+    
+    COPY INTO ZOMATO_ETL.STAGE.Raw_JSON_Data(DATA) from 
+    @ZOMATO_ETL.STAGE.zomato_data
+    files = ('file4.json')--,'file3.json','file4.json','file5.json')
+    file_format = 'ZOMATO_ETL.STAGE.Json_File_Data';
+
+    INSERT INTO ZOMATO_ETL.STAGE.Restaurants(Restaurant_Id,Restaurant_Name,Restaurant_Booking_URL,Restaurant_Menu_URL)
+    SELECT DISTINCT z.value:restaurant:R:res_id::string,z.value:restaurant:name::string,z.value:restaurant:book_url::string,z.value:restaurant:menu_url::string
+    FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z;
+
+    INSERT INTO ZOMATO_ETL.STAGE.User_Rating(Restaurant_Id,Aggregate_Rating,Rating_Text,Votes)
+    SELECT DISTINCT z.value:restaurant:R:res_id::string,z.value:restaurant:user_rating:aggregate_rating::string,z.value:restaurant:user_rating:rating_text::string,z.value:restaurant:user_rating:votes::string
+    FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z;
+
+    INSERT INTO ZOMATO_ETL.STAGE.Restaurant_Cuisine(Cuisine)
+    select DISTINCT TRIM(m.value)::string AS CUISINE from ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z,table(flatten(split(z.value:restaurant:cuisines,','))) m
+    WHERE CUISINE <> '';
+
+    INSERT INTO ZOMATO_ETL.STAGE.Dim_Currency(Currency)
+    select DISTINCT z.value:restaurant:currency::String AS CCY from ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z
+    WHERE CCY <> '';
+
+    copy INTO ZOMATO_ETL.STAGE.Country(Country,Country_Code)
+    FROM (select DISTINCT $3,$2 FROM @ZOMATO_ETL.STAGE.Zomato_Data/Country-Code.csv (file_format => 'ZOMATO_ETL.STAGE.Zomato_Country_Data'));
+    
+    INSERT INTO ZOMATO_ETL.STAGE.City(City)
+    SELECT DISTINCT z.value:restaurant:location:city::STRING FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants))z;   
+
+    INSERT INTO ZOMATO_ETL.STAGE.Geographic_Dim(Lattitude,Longitude)
+    SELECT DISTINCT z.value:restaurant:location:latitude::DECIMAL(28,10),z.value:restaurant:location:longitude::DECIMAL(28,10) FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z;
+
+    INSERT INTO ZOMATO_ETL.STAGE.Restaurant_Location(Res_Id,Restaurant_Name,City,Country,Address,Locality,Zipcode,Lattitude,Longitude)
+    SELECT DISTINCT z.value:restaurant:R:res_id::string,z.value:restaurant:name::string,z.value:restaurant:location:city::string,z.value:restaurant:location:country_id::string,z.value:restaurant:location:address::string,z.value:restaurant:location:locality::string,z.value:restaurant:location:zipcode::string,z.value:restaurant:location:latitude::DECIMAL(28,10),z.value:restaurant:location:longitude::DECIMAL(28,10) FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA T, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z;
+
+    INSERT INTO ZOMATO_ETL.STAGE.Restaurant_Disclaimer(Disclaimer)
+    SELECT DISTINCT e.value:event:disclaimer::STRING
+    FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z,table(flatten(z.value:restaurant:zomato_events)) e;
+
+    INSERT INTO ZOMATO_ETL.STAGE.Restaurant_Events(Res_Id,Restaurant,Event_Id,Event_Title,Event_Description,Event_Disclaimer,Event_Start_Date,Event_End_Date,Event_Start_Time,Event_End_Time,Is_Acitve)
+    SELECT DISTINCT e.value:restaurant:R:res_id::string,e.value:restaurant:name::String,z.value:event:event_id::String,
+z.value:event:title::String,z.value:event:description::String,z.value:event:disclaimer::String,z.value:event:start_date::String,z.value:event:end_date::String,z.value:event:start_time::String,z.value:event:end_time::String,z.value:event:is_active::String
+    FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) e,table(flatten(e.value:restaurant:zomato_events)) z;
+
+    INSERT INTO ZOMATO_ETL.STAGE.Dim_Restaurant_Event_Photos(Event_Id,Photo_Id,Event_Photo_URL)
+    SELECT DISTINCT z.value:event:event_id::String eve,p.value:photo:photo_id::String,p.value:photo:url::String
+    FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) e,table(flatten(e.value:restaurant:zomato_events)) z,table(flatten(z.value:event:photos)) p;
+
+--COMMENTED THE BELOW    
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--     INSERT INTO
+-- ZOMATO_ETL.STAGE.Restaurant_Data_Mapping_Table_Extract(RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_CUISINE,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,RESTAURANT_EVENT_ID,CREATED_BY,CREATED_DATE)
+    
+--     SELECT 
+-- RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_CUISINE,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,EVENT_ID,CREATED_BY,CREATED_DATE 
+--     from
+    
+--     (
+--     WITH CTE_MAIN (RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,CREATED_BY,CREATED_DATE) AS(
+--         SELECT 
+--     DISTINCT e.value:restaurant:R:res_id::string,e.value:restaurant:name::string,e.value:restaurant:average_cost_for_two::string,e.value:restaurant:currency::string,e.value:restaurant:location:city::string,e.value:restaurant:location:country_id,e.value:restaurant:location:address::string,e.value:restaurant:location:locality::string,e.value:restaurant:location:zipcode::string,e.value:restaurant:location:latitude::DECIMAL(28,10),e.value:restaurant:location:longitude::DECIMAL(28,10),e.value:restaurant:has_online_delivery::string,e.value:restaurant:has_table_booking::string,current_user(),current_timestamp()
+--         FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) e 
+--     ),CTE_CUISINE(RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_CUISINE) AS(
+--         select DISTINCT z.value:restaurant:R:res_id::STRING,z.value:restaurant:name::STRING,TRIM(m.value)::string RESTAURANT_CUISINE from ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) z,table(flatten(split(z.value:restaurant:cuisines,','))) m
+--     -- WHERE RESTAURANT_CUISINE <> ''
+--     ),CTE_EVENT(RESTAURANT_ID,RESTAURANT_NAME,EVENT_ID) AS(
+--         SELECT DISTINCT  e.value:restaurant:R:res_id::string,e.value:restaurant:name::string,z.value:event:event_id::String eve
+--     FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) e,table(flatten(e.value:restaurant:zomato_events)) z,table(flatten(z.value:event:photos)) p)
+    
+--     select CM.RESTAURANT_ID,CM.RESTAURANT_NAME,CC.RESTAURANT_CUISINE,CM.RESTAURANT_AVERAGE_COST_FOR_TWO,CM.RESTAURANT_CURRENCY,CM.CITY,CM.COUNTRY,CM.ADDRESS,CM.LOCALITY,CM.ZIPCODE,CM.LATTITUDE,CM.LONGITUDE,CM.HAS_ONLINE_DELIVERY,CM.HAS_TABLE_BOOKING,CE.EVENT_ID,CM.CREATED_BY,CM.CREATED_DATE from CTE_CUISINE CC --5887 TOT REC 5677 res_id is null 
+--     LEFT JOIN CTE_MAIN CM
+--     ON CM.RESTAURANT_ID = CC.RESTAURANT_ID
+--     AND CM.RESTAURANT_NAME = CC.RESTAURANT_NAME
+--     LEFT JOIN CTE_EVENT CE
+--     ON CE.RESTAURANT_ID = CM.RESTAURANT_ID
+--     AND CE.RESTAURANT_NAME = CM.RESTAURANT_NAME) CM;
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    INSERT INTO
+    ZOMATO_ETL.STAGE.Restaurant_Data_Mapping_Table_Extract(RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,RESTAURANT_EVENT_ID,Event_Name,Event_Start_Date,Event_End_Date,RESTAURANT_CUISINE,CREATED_BY,CREATED_DATE)
+        
+        SELECT 
+    RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,EVENT_ID,Event_Name,Event_Start_Date,Event_End_Date,RESTAURANT_CUISINE,CREATED_BY,CREATED_DATE 
+        from
+        
+        (
+        WITH CTE_MAIN 
+        (RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,EVENT_ID,Event_Name,Event_Start_Date,Event_End_Date,RESTAURANT_CUISINE,CREATED_BY,CREATED_DATE) 
+        AS(
+            SELECT 
+        DISTINCT e.value:restaurant:R:res_id::string S,e.value:restaurant:name::string,e.value:restaurant:average_cost_for_two::string,e.value:restaurant:currency::string,e.value:restaurant:location:city::string,e.value:restaurant:location:country_id,e.value:restaurant:location:address::string,e.value:restaurant:location:locality::string,e.value:restaurant:location:zipcode::string,e.value:restaurant:location:latitude::DECIMAL(28,10),e.value:restaurant:location:longitude::DECIMAL(28,10),e.value:restaurant:has_online_delivery::string,e.value:restaurant:has_table_booking::string,NULL,NULL,NULL,NULL,NULL,current_user(),current_timestamp()
+            FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) e 
+        ),CTE_CUISINE
+        (RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,EVENT_ID,Event_Name,Event_Start_Date,Event_End_Date,RESTAURANT_CUISINE,CREATED_BY,CREATED_DATE) 
+        AS(
+            select DISTINCT e.value:restaurant:R:res_id::STRING S,e.value:restaurant:name::STRING,e.value:restaurant:average_cost_for_two::string,e.value:restaurant:currency::string,e.value:restaurant:location:city::string,e.value:restaurant:location:country_id,e.value:restaurant:location:address::string,e.value:restaurant:location:locality::string,e.value:restaurant:location:zipcode::string,e.value:restaurant:location:latitude::DECIMAL(28,10),e.value:restaurant:location:longitude::DECIMAL(28,10),e.value:restaurant:has_online_delivery::string,e.value:restaurant:has_table_booking::string,NULL,NULL,NULL,NULL,TRIM(m.value)::string RESTAURANT_CUISINE,current_user(),current_timestamp() from ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) e,table(flatten(split(e.value:restaurant:cuisines,','))) m
+        -- WHERE RESTAURANT_CUISINE <> ''
+        ),CTE_EVENT
+        (RESTAURANT_ID,RESTAURANT_NAME,RESTAURANT_AVERAGE_COST_FOR_TWO,RESTAURANT_CURRENCY,CITY,COUNTRY,ADDRESS,LOCALITY,ZIPCODE,LATTITUDE,LONGITUDE,HAS_ONLINE_DELIVERY,HAS_TABLE_BOOKING,EVENT_ID,Event_Name,Event_Start_Date,Event_End_Date,RESTAURANT_CUISINE,CREATED_BY,CREATED_DATE) 
+        AS(
+            SELECT DISTINCT  e.value:restaurant:R:res_id::string S,e.value:restaurant:name::string,e.value:restaurant:average_cost_for_two::string,e.value:restaurant:currency::string,e.value:restaurant:location:city::string,e.value:restaurant:location:country_id,e.value:restaurant:location:address::string,e.value:restaurant:location:locality::string,e.value:restaurant:location:zipcode::string,e.value:restaurant:location:latitude::DECIMAL(28,10),e.value:restaurant:location:longitude::DECIMAL(28,10),e.value:restaurant:has_online_delivery::string,e.value:restaurant:has_table_booking::string,z.value:event:event_id::String eve,z.value:event:title::String,z.value:event:start_date::String,z.value:event:end_date::String,TRIM(m.value)::string RESTAURANT_CUISINE,current_user(),current_timestamp()
+        FROM ZOMATO_ETL.STAGE.RAW_JSON_DATA t, table(flatten(t.Data)) f,table(flatten(f.value:restaurants)) e,table(flatten(e.value:restaurant:zomato_events)) z,table(flatten(split(e.value:restaurant:cuisines,','))) m
+        )
+        ,CTE_IMP AS(
+        select * FROM CTE_MAIN
+        UNION 
+        SELECT * FROM CTE_CUISINE
+        UNION 
+        SELECT * FROM CTE_EVENT) --9288
+    
+        SELECT * FROM CTE_IMP 
+        WHERE restaurant_cuisine is not null AND RESTAURANT_AVERAGE_COST_FOR_TWO <> '0'
+        ) m;
+  EXCEPTION
+    WHEN OTHER THEN
+        LET sql_code := sqlcode;
+        LET sql_err := sqlerrm;
+        LET sql_state := sqlstate;
+        INSERT INTO ERROR_LOG(Error_Code,Error_Message,Error_State,Created_By,Created_Date)
+            VALUES(:sql_code,:sql_err,:sql_state,CURRENT_USER(),CURRENT_TIMESTAMP());
+        RAISE;
+END
+$$;
+
+
+CALL sp_insstagetable();
